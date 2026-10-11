@@ -1,0 +1,56 @@
+name: Build iPhone IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'FollowUp/**'
+      - 'FollowUpTests/**'
+      - 'scripts/build-ipa.sh'
+      - 'scripts/test-ios.sh'
+      - 'project.yml'
+      - '.github/workflows/build-ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Build unsigned device IPA
+        run: |
+          set -o pipefail
+          mkdir -p build
+          bash scripts/build-ipa.sh 2>&1 | tee build/device-build.log
+      - name: Run core tests on iPhone simulator
+        run: |
+          set -o pipefail
+          bash scripts/test-ios.sh 2>&1 | tee build/tests.log
+      - name: Upload unsigned IPA
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FollowUp-unsigned-ipa
+          path: build/FollowUp-unsigned.ipa
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload build and test logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/*.log
+          if-no-files-found: ignore
+          retention-days: 14

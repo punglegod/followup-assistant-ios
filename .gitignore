@@ -1,0 +1,7 @@
+build/
+*.xcodeproj/
+.DS_Store
+*.xcuserstate
+FollowUp-source-*.zip
+.local/
+scripts/github-api.py
