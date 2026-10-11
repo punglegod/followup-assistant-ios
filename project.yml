@@ -16,6 +16,9 @@ targets:
       path: FollowUp/Info.plist
       properties:
         CFBundleDisplayName: 回访小助手
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIRequiresFullScreen: true
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

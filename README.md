@@ -23,7 +23,7 @@ bash scripts/build-ipa.sh
 
 也可以执行 `xcodegen generate`，用 Xcode 打开生成的 `FollowUp.xcodeproj`，选择团队后直接运行到真机。当前没有图标素材，使用默认图标占位；应用界面使用原生中文表单。
 
-**当前交付是源码，尚未在 Xcode 编译或真机验证，也没有生成 IPA。Windows 环境没有 iOS SDK。**
+**已通过 GitHub macOS 云端的设备版编译和 7 项核心测试，生成未签名 IPA。真机安装、通知和实际操作仍需签名安装后验证。**
 
 ## 导入已有资料
 
