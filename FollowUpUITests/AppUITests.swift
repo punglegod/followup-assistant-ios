@@ -30,7 +30,7 @@ final class AppUITests: XCTestCase {
         let field = app.textFields["customer-name"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
-        let name = "UITest-" + UUID().uuidString.prefix(6)
+        let name = "UITest-" + String(UUID().uuidString.prefix(6))
         field.typeText(name)
         app.buttons["save-customer"].tap()
         let row = app.staticTexts[name]

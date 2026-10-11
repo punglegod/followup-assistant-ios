@@ -8,7 +8,7 @@ import tree_sitter_swift
 
 root = Path(__file__).resolve().parents[1]
 parser = Parser(Language(tree_sitter_swift.language()))
-files = list(root.glob("FollowUp/*.swift")) + list(root.glob("FollowUpTests/*.swift"))
+files = list(root.glob("FollowUp/*.swift")) + list(root.glob("FollowUpTests/*.swift")) + list(root.glob("FollowUpUITests/*.swift"))
 errors = []
 for path in files:
     tree = parser.parse(path.read_bytes())
