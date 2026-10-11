@@ -7,6 +7,7 @@ on:
     paths:
       - 'FollowUp/**'
       - 'FollowUpTests/**'
+      - 'FollowUpUITests/**'
       - 'scripts/build-ipa.sh'
       - 'scripts/test-ios.sh'
       - 'project.yml'
@@ -25,7 +26,6 @@ jobs:
     timeout-minutes: 35
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
-      IOS_TEST_FILTER: FollowUpUITests/AppUITests/testCustomerSearchAboveDock
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode with Liquid Glass SDK

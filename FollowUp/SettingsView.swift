@@ -16,6 +16,7 @@ struct SettingsView: View {
     @EnvironmentObject var store: Store
     @StateObject private var pdf = PDFImportSession()
     @State private var importing = false
+    @State private var selectedFile: URL?
     @State private var mode = ImportMode.csv
     @State private var exporting = false
     @State private var exportType = UTType.json
@@ -77,7 +78,7 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("关于") {
-                    Text("回访小助手 · 0.2.0")
+                    Text("回访小助手 · 0.2.1")
                     Text("数据保存在本机。搜索匹配已有资料，不生成医疗建议。OCR 内容请核对原文。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -85,7 +86,16 @@ struct SettingsView: View {
             .navigationTitle("设置")
             .sheet(isPresented: $cycles) { CycleEditor(preferences: store.archive.preferences) }
             .sheet(isPresented: $preview) { ImportReview(entries: pendingEntries, summary: summary) }
-            .fileImporter(isPresented: $importing, allowedContentTypes: types) { result in read(result) }
+            .sheet(isPresented: $importing, onDismiss: {
+                guard let url = selectedFile else { return }
+                selectedFile = nil
+                read(.success(url))
+            }) {
+                DocumentImportPicker(types: types, selected: { url in
+                    selectedFile = url
+                    importing = false
+                }, cancelled: { selectedFile = nil; importing = false })
+            }
             .fileExporter(isPresented: $exporting, document: document, contentType: exportType, defaultFilename: exportName) { result in
                 switch result { case .success: message = "已导出"; case .failure(let error): store.error = error.localizedDescription }
             }
@@ -112,6 +122,10 @@ struct SettingsView: View {
     private func read(_ result: Result<URL, Error>) {
         do {
             let url = try result.get()
+            if mode == .pdf {
+                pdf.start(url: url)
+                return
+            }
             let granted = url.startAccessingSecurityScopedResource()
             defer { if granted { url.stopAccessingSecurityScopedResource() } }
             let values = try url.resourceValues(forKeys: [.fileSizeKey])

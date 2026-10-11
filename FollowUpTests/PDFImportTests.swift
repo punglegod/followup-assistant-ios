@@ -4,6 +4,46 @@ import UIKit
 @testable import FollowUp
 
 final class PDFImportTests: XCTestCase {
+    @MainActor
+    func testDocumentSelectionAndCancellationCallbacks() {
+        var selection: URL?
+        var cancelled = false
+        let delegate = DocumentImportPicker.Coordinator(selected: { selection = $0 }, cancelled: { cancelled = true })
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.pdf], asCopy: true)
+        let url = URL(fileURLWithPath: "/tmp/guide.pdf")
+        delegate.documentPicker(picker, didPickDocumentsAt: [url])
+        XCTAssertEqual(selection, url)
+        XCTAssertFalse(cancelled)
+        delegate.documentPickerWasCancelled(picker)
+        XCTAssertTrue(cancelled)
+    }
+
+    @MainActor
+    func testPDFSessionReadsSelectedFileAndReportsFailure() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let data = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 600, height: 800)).pdfData { context in
+            context.beginPage()
+            ("Q: Where is the guide?\nA: Read the official product guide." as NSString).draw(
+                in: CGRect(x: 40, y: 40, width: 500, height: 200), withAttributes: [.font: UIFont.systemFont(ofSize: 20)])
+        }
+        try data.write(to: url)
+        let session = PDFImportSession()
+        session.start(url: url)
+        XCTAssertTrue(session.processing)
+        for _ in 0..<200 where session.processing { try await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertFalse(session.processing)
+        XCTAssertNil(session.error)
+        XCTAssertEqual(session.result?.entries.count, 1)
+        XCTAssertTrue(session.result?.entries.first?.answer.contains("official product guide") == true)
+        try Data("invalid pdf".utf8).write(to: url)
+        session.start(url: url)
+        for _ in 0..<200 where session.processing { try await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertFalse(session.processing)
+        XCTAssertNil(session.result)
+        XCTAssertNotNil(session.error)
+    }
+
     func testQuestionAnswerSplittingAndPageSource() {
         let entries = PDFText.entries(text: "问：如何查看资料？\n答：请查看官方说明。\n问题：第二个问题？\n回答：第二个答案。", document: "说明", page: 2, ocr: false)
         XCTAssertEqual(entries.count, 2)

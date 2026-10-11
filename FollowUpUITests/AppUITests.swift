@@ -6,6 +6,25 @@ final class AppUITests: XCTestCase {
     func testCustomerSearchAboveDock() throws { try checkSearchLayout(tab: "dock-1", title: "客户") }
     func testLibrarySearchAboveDock() throws { try checkSearchLayout(tab: "dock-2", title: "问答与话术") }
 
+    func testSelectedPDFClosesPickerAndOpensPreview() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--test-pdf-selection"]
+        app.launch()
+        app.buttons["dock-3"].tap()
+        let button = app.buttons["import-pdf"]
+        for _ in 0..<4 where !button.isHittable { app.swipeUp() }
+        XCTAssertTrue(button.isHittable)
+        button.tap()
+        XCTAssertTrue(app.navigationBars["导入预览"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["Where is the product guide?"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Selected PDF import preview"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["导入"].tap()
+        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5))
+        app.buttons["dock-2"].tap()
+        XCTAssertTrue(app.staticTexts["Where is the product guide?"].waitForExistence(timeout: 5))
+    }
+
     private func checkSearchLayout(tab: String, title: String) throws {
         let app = XCUIApplication()
         app.launch()

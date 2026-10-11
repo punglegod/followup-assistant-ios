@@ -87,17 +87,44 @@ final class PDFImportSession: ObservableObject {
     private var worker: Task<PDFImportResult, Error>?
     private var generation = UUID()
 
-    func start(data: Data, name: String) {
+    func start(url: URL) {
+        start(name: url.deletingPathExtension().lastPathComponent) {
+            let granted = url.startAccessingSecurityScopedResource()
+            defer { if granted { url.stopAccessingSecurityScopedResource() } }
+            var coordinationError: NSError?
+            var contents: Result<Data, Error>?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { coordinatedURL in
+                contents = Result {
+                    let size = try coordinatedURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                    guard size <= 20_000_000 else { throw DataError.invalid("文件过大，请拆分为 20 MB 以内的文件") }
+                    let data = try Data(contentsOf: coordinatedURL)
+                    guard data.count <= 20_000_000 else { throw DataError.invalid("文件过大，请拆分为 20 MB 以内的文件") }
+                    return data
+                }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let contents else { throw DataError.invalid("未能读取文件，请重新选择 PDF") }
+            return try contents.get()
+        }
+    }
+
+    func start(data: Data, name: String) { start(name: name) { data } }
+
+    private func start(name: String, load: @escaping @Sendable () throws -> Data) {
         cancel()
         let ticket = UUID(); generation = ticket
         result = nil; error = nil; processing = true; progress = "正在读取 PDF…"
-        let worker = Task.detached(priority: .userInitiated) { [weak self] in
-            try PDFImport.extract(data: data, name: name) { page, total in
-                Task { @MainActor [weak self] in
-                    guard self?.generation == ticket else { return }
-                    self?.progress = "正在处理第 \(page) / \(total) 页"
-                }
+        let report: @Sendable (Int, Int) -> Void = { [weak self] page, total in
+            Task { @MainActor [weak self] in
+                guard self?.generation == ticket else { return }
+                self?.progress = "正在处理第 \(page) / \(total) 页"
             }
+        }
+        let worker = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            let data = try load()
+            try Task.checkCancellation()
+            return try PDFImport.extract(data: data, name: name, progress: report)
         }
         self.worker = worker
         Task {

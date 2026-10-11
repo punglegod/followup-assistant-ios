@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct FollowUpApp: App {
@@ -41,17 +42,17 @@ struct AppRoot: View {
             GlassDock(selection: $selected, transparency: store.archive.preferences.dockTransparency)
                 .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 8)
         }
+        .onChange(of: selected) { _ in
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
 }
 
 struct GlassDock: View {
     @Binding var selection: AppTab
     let transparency: Double
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var indicator
-    private var tint: Color { colorScheme == .dark ? Color.black : Color.white }
     var body: some View {
         HStack(spacing: 4) {
             ForEach(AppTab.allCases) { tab in
@@ -74,19 +75,29 @@ struct GlassDock: View {
                 .accessibilityIdentifier("dock-\(tab.rawValue)")
             }
         }
-        .padding(8).background { background }
-        .overlay { Capsule().strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.16 : 0.45), lineWidth: 0.6).allowsHitTesting(false) }
-        .shadow(color: .black.opacity(0.12), radius: 15, y: 7)
+        .padding(8)
+        .modifier(DockGlassSurface(transparency: transparency))
     }
-    @ViewBuilder private var background: some View {
+}
+
+private struct DockGlassSurface: ViewModifier {
+    let transparency: Double
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    private var tint: Color { colorScheme == .dark ? .black : .white }
+
+    @ViewBuilder func body(content: Content) -> some View {
         if reduceTransparency {
-            Capsule().fill(Color(uiColor: .secondarySystemBackground))
+            content.background(Color(uiColor: .secondarySystemBackground), in: Capsule())
         } else if #available(iOS 26.0, *) {
-            Capsule().fill(tint.opacity((1 - transparency) * 0.65))
-                .glassEffect(.clear.tint(tint.opacity((1 - transparency) * 0.35)).interactive(), in: .capsule)
+            content.glassEffect(.regular.tint(tint.opacity((1 - transparency) * 0.5)).interactive(), in: .capsule)
         } else {
-            Capsule().fill(.ultraThinMaterial).opacity(1 - transparency * 0.8)
-                .overlay { Capsule().fill(tint.opacity((1 - transparency) * 0.5)) }
+            content.background {
+                Capsule().fill(.ultraThinMaterial).opacity(1 - transparency * 0.8)
+                    .overlay { Capsule().fill(tint.opacity((1 - transparency) * 0.5)) }
+            }
+            .overlay { Capsule().strokeBorder(.white.opacity(0.3), lineWidth: 0.6).allowsHitTesting(false) }
+            .shadow(color: .black.opacity(0.12), radius: 15, y: 7)
         }
     }
 }

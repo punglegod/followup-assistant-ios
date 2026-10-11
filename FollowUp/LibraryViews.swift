@@ -36,7 +36,7 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("问答与话术")
-            .searchable(text: $query, prompt: "输入问题、关键词或产品")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "输入问题、关键词或产品")
             .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("新增问答或话术") }
             .sheet(isPresented: $adding) { KnowledgeEditor(entry: Knowledge(kind: kind)) }
         }

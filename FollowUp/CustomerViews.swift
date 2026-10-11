@@ -65,7 +65,7 @@ struct CustomersView: View {
                 if customers.isEmpty { Text("暂无客户，点击右上角添加").foregroundStyle(.secondary) }
                 ForEach(customers) { customer in NavigationLink { CustomerDetail(id: customer.id) } label: { CustomerRow(customer: customer) } }
             }
-            .searchable(text: $query, prompt: "姓名、联系方式、产品").navigationTitle("客户")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "姓名、联系方式、产品").navigationTitle("客户")
             .toolbar { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("添加客户").accessibilityIdentifier("add-customer") }
             .sheet(isPresented: $adding) { CustomerEditor(customer: Customer()) }
         }
