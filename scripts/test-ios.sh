@@ -19,8 +19,5 @@ if [ -d build/TestResults.xcresult ]; then
   xcrun xcresulttool export attachments --path build/TestResults.xcresult --output-path build/screenshots
 fi
 if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
-xcrun simctl bootstatus "$simulator_id" -b
-xcrun simctl install "$simulator_id" build/TestDerivedData/Build/Products/Debug-iphonesimulator/FollowUp.app
-xcrun simctl launch "$simulator_id" com.sunway.followup
-sleep 2
-xcrun simctl io "$simulator_id" screenshot build/preview.png
+# UI tests already capture the app on Xcode's test simulator. Booting the separate
+# destination device here can hang after a successful test run; use those attachments.
