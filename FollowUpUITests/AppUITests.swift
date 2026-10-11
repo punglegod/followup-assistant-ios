@@ -3,6 +3,30 @@ import XCTest
 final class AppUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testCustomerSearchAboveDock() throws { try checkSearchLayout(tab: "dock-1", title: "客户") }
+    func testLibrarySearchAboveDock() throws { try checkSearchLayout(tab: "dock-2", title: "问答与话术") }
+
+    private func checkSearchLayout(tab: String, title: String) throws {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.buttons[tab].waitForExistence(timeout: 10))
+        app.buttons[tab].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        let dock = app.buttons["dock-0"]
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = title + " search and dock layout"; shot.lifetime = .keepAlways; add(shot)
+        XCTAssertLessThan(search.frame.maxY, dock.frame.minY - 8, "搜索框不应与底栏重叠")
+        XCTAssertLessThan(search.frame.midY, app.frame.height * 0.5, "搜索框应位于标题下方")
+        XCTAssertTrue(search.isHittable)
+        XCTAssertTrue(dock.isHittable)
+        search.tap()
+        search.typeText("NoMatchRegressionQuery")
+        XCTAssertLessThan(search.frame.maxY, dock.frame.minY - 8, "输入时搜索框与底栏仍应分离")
+        dock.tap()
+        XCTAssertTrue(app.navigationBars["回访小助手"].waitForExistence(timeout: 5))
+    }
+
     func testDockNavigationAndTransparencyControl() throws {
         let app = XCUIApplication()
         app.launch()
