@@ -16,7 +16,7 @@ for path in files:
     while stack:
         node = stack.pop()
         if node.type == "ERROR" or node.is_missing:
-            errors.append(f"{path.name}:{node.start_point.row + 1}: {node.type}")
+            errors.append(f"{path.name}:{node.start_point.row + 1}: {node.type}: {path.read_bytes()[node.start_byte:node.end_byte]!r}")
         stack.extend(node.children)
 assert not errors, "\n".join(errors)
 

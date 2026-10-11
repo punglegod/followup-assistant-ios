@@ -27,12 +27,21 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO
-        MARKETING_VERSION: '0.1.0'
-        CURRENT_PROJECT_VERSION: '1'
+        MARKETING_VERSION: '0.2.0'
+        CURRENT_PROJECT_VERSION: '2'
   FollowUpTests:
     type: bundle.unit-test
     platform: iOS
     sources: [FollowUpTests]
+    dependencies:
+      - target: FollowUp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  FollowUpUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [FollowUpUITests]
     dependencies:
       - target: FollowUp
     settings:
@@ -44,4 +53,4 @@ schemes:
       targets:
         FollowUp: all
     test:
-      targets: [FollowUpTests]
+      targets: [FollowUpTests, FollowUpUITests]

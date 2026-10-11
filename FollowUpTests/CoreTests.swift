@@ -42,7 +42,7 @@ final class CoreTests: XCTestCase {
     }
 
     func testArchiveRoundTripIncludesVisitAndReminder() throws {
-        var customer = Customer(name: "客户", nextFollowUp: Date(timeIntervalSince1970: 1800000000))
+        var customer = Customer(name: "客户", followUps: [FollowUpTask(date: Date(timeIntervalSince1970: 1800000000))])
         customer.history = [Visit(result: "已回访")]
         let original = Archive(customers: [customer], knowledge: [Knowledge(question: "问题", answer: "答案")])
         let restored = try JSONDecoder().decode(Archive.self, from: JSONEncoder().encode(original))
@@ -54,6 +54,6 @@ final class CoreTests: XCTestCase {
     func testArchiveRejectsDuplicateIDsAndUnknownVersion() {
         let customer = Customer(name: "客户")
         XCTAssertThrowsError(try Archive(customers: [customer, customer]).validate())
-        XCTAssertThrowsError(try Archive(version: 2).validate())
+        XCTAssertThrowsError(try Archive(version: 99).validate())
     }
 }

@@ -8,14 +8,106 @@ struct Customer: Identifiable, Codable, Equatable {
     var notes = ""
     var status = "咨询中"
     var createdAt = Date()
-    var nextFollowUp: Date? = nil
+    var consultedAt = Date()
+    var followUps: [FollowUpTask] = []
     var history: [Visit] = []
+
+    var pendingFollowUps: [FollowUpTask] {
+        followUps.filter { $0.completedAt == nil }.sorted { $0.date < $1.date }
+    }
+    var nextFollowUp: Date? { pendingFollowUps.first?.date }
+
+    mutating func recordVisit(result: String, taskID: UUID?, at date: Date = Date()) throws {
+        if let taskID {
+            guard let index = followUps.firstIndex(where: { $0.id == taskID && $0.completedAt == nil }) else {
+                throw DataError.invalid("这项回访已完成或已删除，请刷新后重试")
+            }
+            followUps[index].completedAt = date
+        }
+        history.append(Visit(date: date, result: result, followUpID: taskID))
+    }
+}
+
+extension Customer {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, contact, product, notes, status, createdAt, consultedAt, followUps, history, nextFollowUp
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        contact = try c.decode(String.self, forKey: .contact)
+        product = try c.decode(String.self, forKey: .product)
+        notes = try c.decode(String.self, forKey: .notes)
+        status = try c.decode(String.self, forKey: .status)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        consultedAt = try c.decodeIfPresent(Date.self, forKey: .consultedAt) ?? createdAt
+        history = try c.decode([Visit].self, forKey: .history)
+        if let tasks = try c.decodeIfPresent([FollowUpTask].self, forKey: .followUps) {
+            followUps = tasks
+        } else if let date = try c.decodeIfPresent(Date.self, forKey: .nextFollowUp) {
+            followUps = [FollowUpTask(title: "原回访计划", date: date)]
+        } else { followUps = [] }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(name, forKey: .name)
+        try c.encode(contact, forKey: .contact); try c.encode(product, forKey: .product)
+        try c.encode(notes, forKey: .notes); try c.encode(status, forKey: .status)
+        try c.encode(createdAt, forKey: .createdAt); try c.encode(consultedAt, forKey: .consultedAt)
+        try c.encode(followUps, forKey: .followUps); try c.encode(history, forKey: .history)
+    }
+}
+
+struct FollowUpTask: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var title = "手动回访"
+    var date: Date
+    var completedAt: Date? = nil
+}
+
+struct PendingFollowUp: Identifiable {
+    var customer: Customer
+    var task: FollowUpTask
+    var id: UUID { task.id }
+}
+
+struct Preferences: Codable, Equatable {
+    var followUpDays = [3, 7, 21]
+    var reminderHour = 9
+    var reminderMinute = 0
+    // Transparency changes the background only; labels stay fully opaque.
+    var dockTransparency = 0.55
+
+    func makePlan(from consultation: Date, calendar: Calendar = .current) -> [FollowUpTask] {
+        followUpDays.sorted().compactMap { day in
+            guard let base = calendar.date(byAdding: .day, value: day, to: consultation),
+                  let date = calendar.date(bySettingHour: reminderHour, minute: reminderMinute, second: 0, of: base) else { return nil }
+            return FollowUpTask(title: "咨询后第 \(day) 天", date: date)
+        }
+    }
+
+    static func parseDays(_ input: String) throws -> [Int] {
+        let tokens = input.components(separatedBy: CharacterSet(charactersIn: ",，、;； \n"))
+            .filter { !$0.isEmpty }
+        let days = try tokens.map { token -> Int in
+            guard let day = Int(token), (1...3650).contains(day) else {
+                throw DataError.invalid("周期请输入 1–3650 的天数，例如 3、7、21")
+            }
+            return day
+        }
+        guard !days.isEmpty && days.count <= 30 else { throw DataError.invalid("请填写 1–30 个回访周期") }
+        return Set(days).sorted()
+    }
 }
 
 struct Visit: Identifiable, Codable, Equatable {
     var id = UUID()
     var date = Date()
     var result: String
+    var followUpID: UUID? = nil
 }
 
 struct Knowledge: Identifiable, Codable, Equatable {
@@ -35,12 +127,19 @@ struct Knowledge: Identifiable, Codable, Equatable {
 }
 
 struct Archive: Codable {
-    var version = 1
+    var version = 2
     var customers: [Customer] = []
     var knowledge: [Knowledge] = []
+    var preferences = Preferences()
+
+    var pendingFollowUps: [PendingFollowUp] {
+        customers.flatMap { customer in
+            customer.pendingFollowUps.map { PendingFollowUp(customer: customer, task: $0) }
+        }.sorted { $0.task.date < $1.task.date }
+    }
 
     func validate() throws {
-        guard version == 1 else { throw DataError.invalid("备份版本不受支持") }
+        guard version == 2 else { throw DataError.invalid("备份版本不受支持") }
         guard Set(customers.map(\.id)).count == customers.count,
               Set(knowledge.map(\.id)).count == knowledge.count else {
             throw DataError.invalid("备份中存在重复记录编号")
@@ -49,6 +148,28 @@ struct Archive: Codable {
               knowledge.allSatisfy({ !$0.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && ["问答", "话术"].contains($0.kind) }) else {
             throw DataError.invalid("备份中有缺少必填内容的记录")
         }
+        let tasks = customers.flatMap(\.followUps)
+        guard Set(tasks.map(\.id)).count == tasks.count else { throw DataError.invalid("回访计划编号重复") }
+        guard !preferences.followUpDays.isEmpty, preferences.followUpDays.count <= 30,
+              preferences.followUpDays.allSatisfy({ (1...3650).contains($0) }),
+              Set(preferences.followUpDays).count == preferences.followUpDays.count,
+              (0...23).contains(preferences.reminderHour), (0...59).contains(preferences.reminderMinute),
+              preferences.dockTransparency.isFinite, (0...1).contains(preferences.dockTransparency) else {
+            throw DataError.invalid("回访周期或外观设置不正确")
+        }
+    }
+}
+
+extension Archive {
+    private enum CodingKeys: String, CodingKey { case version, customers, knowledge, preferences }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let savedVersion = try c.decode(Int.self, forKey: .version)
+        guard [1, 2].contains(savedVersion) else { throw DataError.invalid("备份版本不受支持") }
+        version = 2
+        customers = try c.decode([Customer].self, forKey: .customers)
+        knowledge = try c.decode([Knowledge].self, forKey: .knowledge)
+        preferences = try c.decodeIfPresent(Preferences.self, forKey: .preferences) ?? Preferences()
     }
 }
 

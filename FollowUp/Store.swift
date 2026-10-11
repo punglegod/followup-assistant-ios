@@ -26,7 +26,7 @@ final class Store: ObservableObject {
     }
 
     @discardableResult
-    func commit(_ next: Archive, restoring: Bool = false) -> Bool {
+    func commit(_ next: Archive, restoring: Bool = false, reschedule: Bool = true) -> Bool {
         guard !loadFailed || restoring else { error = "请先恢复备份，避免覆盖原数据"; return false }
         do {
             try next.validate()
@@ -35,7 +35,7 @@ final class Store: ObservableObject {
             try data.write(to: file, options: [.atomic, .completeFileProtection])
             archive = next
             loadFailed = false
-            refreshReminders()
+            if reschedule { refreshReminders() }
             return true
         } catch {
             self.error = "保存失败：\(error.localizedDescription)"
@@ -59,6 +59,22 @@ final class Store: ObservableObject {
 
     func deleteCustomer(_ id: UUID) { var next = archive; next.customers.removeAll { $0.id == id }; _ = commit(next) }
     func deleteEntry(_ id: UUID) { var next = archive; next.knowledge.removeAll { $0.id == id }; _ = commit(next) }
+
+    func savePreferences(_ preferences: Preferences) -> Bool {
+        var next = archive
+        next.preferences = preferences
+        return commit(next, reschedule: false)
+    }
+
+    func recordVisit(customerID: UUID, taskID: UUID?, result: String, additional: FollowUpTask?) -> Bool {
+        var next = archive
+        guard let index = next.customers.firstIndex(where: { $0.id == customerID }) else { error = "客户已删除"; return false }
+        do {
+            try next.customers[index].recordVisit(result: result, taskID: taskID)
+            if let additional { next.customers[index].followUps.append(additional) }
+            return commit(next)
+        } catch { self.error = error.localizedDescription; return false }
+    }
 
     func importEntries(_ entries: [Knowledge]) -> Bool {
         var next = archive
@@ -92,28 +108,28 @@ final class Store: ObservableObject {
         notificationStatus = allowed ? "已开启" : "未开启，请在系统设置中允许通知"
         center.removeAllPendingNotificationRequests()
         guard allowed else { reminderSummary = "待办列表仍可查看，系统通知未开启"; return }
-        let scheduled = archive.customers.filter { $0.nextFollowUp != nil }.sorted { $0.nextFollowUp! < $1.nextFollowUp! }
+        let scheduled = archive.pendingFollowUps
         // Keep room under system pending-notification limits. Replenish on each foreground/save.
-        let upcoming = scheduled.filter { $0.nextFollowUp! > Date() }
-        let overdue = scheduled.filter { $0.nextFollowUp! <= Date() }
+        let upcoming = scheduled.filter { $0.task.date > Date() }
+        let overdue = scheduled.filter { $0.task.date <= Date() }
         var requests: [UNNotificationRequest] = []
         if !overdue.isEmpty {
             let content = UNMutableNotificationContent()
             content.title = "回访小助手"
-            content.body = "有 \(overdue.count) 位客户待回访，请打开应用查看。"
+            content.body = "有 \(overdue.count) 项回访待完成，请打开应用查看。"
             content.sound = .default
             let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
             let date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: tomorrow)!
             let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date), repeats: false)
             requests.append(UNNotificationRequest(identifier: "overdue", content: content, trigger: trigger))
         }
-        for customer in upcoming.prefix(59) {
+        for item in upcoming.prefix(59) {
             let content = UNMutableNotificationContent()
             content.title = "回访小助手"
             content.body = "有一项客户回访到期，请打开应用查看。"
             content.sound = .default
-            let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: customer.nextFollowUp!), repeats: false)
-            requests.append(UNNotificationRequest(identifier: customer.id.uuidString, content: content, trigger: trigger))
+            let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: item.task.date), repeats: false)
+            requests.append(UNNotificationRequest(identifier: item.id.uuidString, content: content, trigger: trigger))
         }
         for request in requests {
             guard !Task.isCancelled else { return }

@@ -27,6 +27,11 @@ jobs:
       HOMEBREW_NO_AUTO_UPDATE: '1'
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode with Liquid Glass SDK
+        run: |
+          xcode_path=$(python3 -c 'from pathlib import Path; import re; paths=list(Path("/Applications").glob("Xcode_26*.app")); assert paths, "Xcode 26 or later required"; print(max(paths,key=lambda p: tuple(int(n) for n in re.findall(r"\d+",p.name))))')
+          sudo xcode-select -s "$xcode_path/Contents/Developer"
+          xcodebuild -version
       - name: Install project generator
         run: brew install xcodegen
       - name: Build unsigned device IPA
@@ -51,6 +56,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: build/*.log
+          path: |
+            build/*.log
+            build/preview.png
+            build/TestResults.xcresult
           if-no-files-found: ignore
           retention-days: 14
